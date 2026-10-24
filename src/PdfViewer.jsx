@@ -1,10 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
-import pdfWorkerUrl from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url'
+import { Document, Page, pdfjs } from 'react-pdf'
+import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
+import 'react-pdf/dist/Page/AnnotationLayer.css'
+import 'react-pdf/dist/Page/TextLayer.css'
+
+pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl
 
 function PdfViewer({ url }) {
   const containerRef = useRef(null)
-  const canvasRef = useRef(null)
-  const [pdfDocument, setPdfDocument] = useState(null)
+  const [pageCount, setPageCount] = useState(null)
   const [pageNumber, setPageNumber] = useState(1)
   const [containerWidth, setContainerWidth] = useState(0)
   const [zoom, setZoom] = useState(1)
@@ -12,57 +16,6 @@ function PdfViewer({ url }) {
   const [errorMessage, setErrorMessage] = useState('')
 
   useEffect(() => {
-    let cancelled = false
-    let loadingTask
-    const abortController = new AbortController()
-
-    Promise.all([
-      import('pdfjs-dist/legacy/build/pdf.mjs'),
-      fetch(url, { signal: abortController.signal }),
-    ])
-      .then(async ([{ getDocument, GlobalWorkerOptions }, response]) => {
-        if (cancelled) return null
-
-        if (!response.ok || response.status === 204) {
-          throw new Error(`server mengembalikan HTTP ${response.status}`)
-        }
-
-        const data = new Uint8Array(await response.arrayBuffer())
-        if (!data.length) {
-          throw new Error('berkas PDF kosong')
-        }
-
-        GlobalWorkerOptions.workerSrc = pdfWorkerUrl
-        loadingTask = getDocument({ data })
-        return loadingTask.promise
-      })
-      .then((document) => {
-        if (!document) return
-        if (cancelled) {
-          document.destroy()
-          return
-        }
-
-        setPdfDocument(document)
-        setLoadStatus('ready')
-      })
-      .catch((error) => {
-        if (!cancelled) {
-          setLoadStatus('error')
-          setErrorMessage(`PDF tidak dapat dimuat: ${error.message}`)
-        }
-      })
-
-    return () => {
-      cancelled = true
-      abortController.abort()
-      loadingTask?.destroy()
-    }
-  }, [url])
-
-  useEffect(() => {
-    if (loadStatus !== 'ready') return undefined
-
     const container = containerRef.current
     if (!container) return undefined
 
@@ -77,63 +30,32 @@ function PdfViewer({ url }) {
       cancelAnimationFrame(animationFrame)
       observer.disconnect()
     }
-  }, [loadStatus])
+  }, [])
 
-  useEffect(() => {
-    if (!pdfDocument || !containerWidth || !canvasRef.current) return undefined
+  function handleLoadSuccess({ numPages }) {
+    setPageCount(numPages)
+    setPageNumber(1)
+    setLoadStatus('ready')
+  }
 
-    let cancelled = false
-    let renderTask
+  function handleLoadError(error) {
+    setLoadStatus('error')
+    setErrorMessage(`PDF tidak dapat dimuat: ${error.message}`)
+  }
 
-    pdfDocument
-      .getPage(pageNumber)
-      .then((page) => {
-        if (cancelled) return
-
-        const baseViewport = page.getViewport({ scale: 1 })
-        const fitScale = Math.max(0.1, (containerWidth - 32) / baseViewport.width)
-        const viewport = page.getViewport({ scale: fitScale * zoom })
-        const outputScale = window.devicePixelRatio || 1
-        const canvas = canvasRef.current
-        const context = canvas.getContext('2d')
-
-        canvas.width = Math.floor(viewport.width * outputScale)
-        canvas.height = Math.floor(viewport.height * outputScale)
-        canvas.style.width = `${viewport.width}px`
-        canvas.style.height = `${viewport.height}px`
-
-        renderTask = page.render({
-          canvas,
-          canvasContext: context,
-          viewport,
-          transform:
-            outputScale === 1
-              ? null
-              : [outputScale, 0, 0, outputScale, 0, 0],
-        })
-        return renderTask.promise
-      })
-      .catch((error) => {
-        if (!cancelled && error.name !== 'RenderingCancelledException') {
-          setErrorMessage(`Halaman PDF gagal ditampilkan: ${error.message}`)
-          setLoadStatus('error')
-        }
-      })
-
-    return () => {
-      cancelled = true
-      renderTask?.cancel()
-    }
-  }, [containerWidth, pageNumber, pdfDocument, zoom])
+  function handlePageError(error) {
+    setLoadStatus('error')
+    setErrorMessage(`Halaman PDF gagal ditampilkan: ${error.message}`)
+  }
 
   function changePage(nextPage) {
-    if (pdfDocument && nextPage >= 1 && nextPage <= pdfDocument.numPages) {
+    if (pageCount && nextPage >= 1 && nextPage <= pageCount) {
       setPageNumber(nextPage)
     }
   }
 
   return (
-    <div className="pdf-js-viewer">
+    <div className="pdf-js-viewer" ref={containerRef}>
       {loadStatus === 'loading' && (
         <div className="pdf-viewer-message" role="status">
           Memuat dokumen PDF...
@@ -144,8 +66,16 @@ function PdfViewer({ url }) {
           {errorMessage}
         </div>
       )}
-      {loadStatus === 'ready' && (
-        <div className="pdf-viewer-controls" aria-label="Kontrol PDF">
+      <Document
+        file={url}
+        onLoadSuccess={handleLoadSuccess}
+        onLoadError={handleLoadError}
+        loading={null}
+        error={null}
+        className="pdf-document"
+      >
+        {loadStatus === 'ready' && (
+          <div className="pdf-viewer-controls" aria-label="Kontrol PDF">
             <button
               type="button"
               onClick={() => changePage(pageNumber - 1)}
@@ -154,12 +84,12 @@ function PdfViewer({ url }) {
               Sebelumnya
             </button>
             <span aria-live="polite">
-              Halaman {pageNumber} dari {pdfDocument.numPages}
+              Halaman {pageNumber} dari {pageCount}
             </span>
             <button
               type="button"
               onClick={() => changePage(pageNumber + 1)}
-              disabled={pageNumber >= pdfDocument.numPages}
+              disabled={pageNumber >= pageCount}
             >
               Berikutnya
             </button>
@@ -181,21 +111,25 @@ function PdfViewer({ url }) {
             >
               +
             </button>
-        </div>
-      )}
-      <div
-        className="pdf-canvas-container"
-        ref={containerRef}
-        hidden={loadStatus !== 'ready'}
-      >
-        {loadStatus === 'ready' && (
-            <canvas
-              className="pdf-canvas"
-              ref={canvasRef}
-              aria-label={`Halaman ${pageNumber} dari dokumen PDF`}
-            />
+          </div>
         )}
-      </div>
+        <div
+          className="pdf-canvas-container"
+          hidden={loadStatus !== 'ready'}
+        >
+          {loadStatus === 'ready' && containerWidth > 32 && (
+            <Page
+              className="pdf-canvas"
+              pageNumber={pageNumber}
+              width={containerWidth - 32}
+              scale={zoom}
+              onLoadError={handlePageError}
+              loading={null}
+              error={null}
+            />
+          )}
+        </div>
+      </Document>
     </div>
   )
 }

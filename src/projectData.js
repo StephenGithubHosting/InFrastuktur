@@ -23,9 +23,9 @@ export const DEFAULT_PROJECT_DATA = {
   budgetSpent: 3290000000,
   projectImage:
     'https://images.unsplash.com/photo-1541888946425-d81bb19240f5?auto=format&fit=crop&w=1500&q=85',
-  permitDocumentName: 'Surat permohonan IMB',
+  permitDocumentName: 'Contoh Permohonan IMB/PBG (Draf)',
   permitDocumentUrl: '/dokumen-proyek.pdf',
-  planDocumentUrl: '',
+  planDocumentUrl: '/denah-bangunan-puskesmas-prambanan.pdf',
   categories: [
     {
       name: 'Konstruksi & material',
@@ -116,10 +116,23 @@ export function loadProjectData() {
   }
 
   try {
-    return {
+    const project = {
       ...cloneDefaultData(),
       ...JSON.parse(savedData),
     }
+
+    if (
+      project.permitDocumentUrl === DEFAULT_PROJECT_DATA.permitDocumentUrl &&
+      [
+        'Surat permohonan IMB',
+        'Ringkasan Proyek Puskesmas Prambanan',
+      ].includes(project.permitDocumentName)
+    ) {
+      project.permitDocumentName = DEFAULT_PROJECT_DATA.permitDocumentName
+      project.planDocumentUrl ||= DEFAULT_PROJECT_DATA.planDocumentUrl
+    }
+
+    return project
   } catch (error) {
     console.error('Tidak dapat membaca data proyek tersimpan.', error)
     return cloneDefaultData()

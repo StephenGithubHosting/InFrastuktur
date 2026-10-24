@@ -1,0 +1,325 @@
+.report-page {
+  min-height: 100vh;
+  background: #f4f7f9;
+  color: #1e293b;
+}
+
+.report-page-header {
+  display: flex;
+  min-height: 68px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 0 max(20px, calc((100vw - 1120px) / 2));
+  border-bottom: 1px solid #e5ebef;
+  background: #fff;
+}
+
+.report-page-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.report-page-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: #202c3b;
+  font-size: 16px;
+  font-weight: 750;
+  text-decoration: none;
+}
+
+.report-page-brand-mark {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border-radius: 10px;
+  background: #0798b2;
+  color: #fff;
+}
+
+.report-back-link {
+  color: #078ba4;
+  font-size: 14px;
+  font-weight: 650;
+  text-decoration: none;
+}
+
+.report-page-content {
+  width: min(760px, 100%);
+  margin: 0 auto;
+  padding: 48px 24px 64px;
+}
+
+.report-page-heading {
+  margin-bottom: 25px;
+}
+
+.report-page-kicker {
+  color: #078ba4;
+  font-size: 12px;
+  font-weight: 750;
+  letter-spacing: .7px;
+}
+
+.report-page-heading h1 {
+  margin: 10px 0 8px;
+  color: #202c3b;
+  font-size: clamp(26px, 4vw, 34px);
+  letter-spacing: -.8px;
+}
+
+.report-page-heading p {
+  max-width: 660px;
+  margin: 0;
+  color: #617184;
+  font-size: 15px;
+  line-height: 1.65;
+}
+
+.report-page-form,
+.report-confirmation {
+  display: grid;
+  gap: 18px;
+  padding: 28px;
+  border: 1px solid #e5ebef;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 4px 16px rgb(15 23 42 / 4%);
+}
+
+.report-form-note {
+  display: grid;
+  gap: 4px;
+  padding: 14px 16px;
+  border: 1px solid #dceef1;
+  border-radius: 10px;
+  background: #f4fbfc;
+  color: #5b7180;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.report-form-note strong {
+  color: #087f93;
+}
+
+.report-page-form label {
+  display: grid;
+  min-width: 0;
+  gap: 7px;
+  color: #405166;
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.report-page-form input,
+.report-page-form select,
+.report-page-form textarea {
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid #dce6eb;
+  border-radius: 9px;
+  background: #fff;
+  color: #243244;
+  font-size: 14px;
+}
+
+.report-page-form textarea {
+  min-height: 132px;
+  resize: vertical;
+}
+
+.report-page-form input:focus,
+.report-page-form select:focus,
+.report-page-form textarea:focus {
+  border-color: #4fc0d1;
+  outline: 3px solid rgb(6 169 195 / 12%);
+}
+
+.report-form-contact-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.report-page-submit {
+  display: inline-flex;
+  min-height: 46px;
+  align-items: center;
+  justify-content: center;
+  padding: 11px 16px;
+  border: 0;
+  border-radius: 10px;
+  background: #0798b2;
+  color: #fff;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.report-page-submit:hover {
+  background: #087f93;
+}
+
+.report-storage-disclaimer {
+  margin: -8px 0 0;
+  color: #738194;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.report-page-error {
+  padding: 11px 13px;
+  border: 1px solid #efd1cb;
+  border-radius: 9px;
+  background: #fff5f3;
+  color: #9a4d42;
+  font-size: 13px;
+}
+
+.report-confirmation {
+  justify-items: start;
+  gap: 10px;
+}
+
+.report-confirmation-mark {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border-radius: 50%;
+  background: #e7f8fa;
+  color: #078ba4;
+  font-size: 23px;
+  font-weight: 750;
+}
+
+.report-confirmation h2,
+.report-confirmation p {
+  margin: 0;
+}
+
+.report-confirmation h2 {
+  color: #202c3b;
+  font-size: 22px;
+}
+
+.report-confirmation p {
+  color: #617184;
+  font-size: 14px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 620px) {
+  .report-page-header {
+    min-height: 60px;
+    padding: 0 15px;
+  }
+
+  .report-page-header-actions {
+    gap: 9px;
+  }
+
+  .report-page-brand {
+    font-size: 14px;
+  }
+
+  .report-page-content {
+    padding: 30px 15px 42px;
+  }
+
+  .report-page-form,
+  .report-confirmation {
+    gap: 15px;
+    padding: 19px 16px;
+  }
+
+  .report-form-contact-fields {
+    grid-template-columns: 1fr;
+  }
+}
+
+.report-page.theme-dark {
+  background: #080808;
+  color: #ededed;
+  color-scheme: dark;
+}
+
+.report-page.theme-dark .report-page-header {
+  border-color: #252525;
+  background: #090909;
+}
+
+.report-page.theme-dark .report-page-brand,
+.report-page.theme-dark .report-page-heading h1,
+.report-page.theme-dark .report-confirmation h2 {
+  color: #ededed;
+}
+
+.report-page.theme-dark .report-page-heading p,
+.report-page.theme-dark .report-confirmation p,
+.report-page.theme-dark .report-storage-disclaimer {
+  color: #aaa;
+}
+
+.report-page.theme-dark .report-page-kicker,
+.report-page.theme-dark .report-back-link {
+  color: #82d8e0;
+}
+
+.report-page.theme-dark .report-page-form,
+.report-page.theme-dark .report-confirmation {
+  border-color: #292929;
+  background: #111;
+  box-shadow: 0 10px 28px rgb(0 0 0 / 24%);
+}
+
+.report-page.theme-dark .report-form-note {
+  border-color: #303030;
+  background: #181818;
+  color: #c3c3c3;
+}
+
+.report-page.theme-dark .report-form-note strong {
+  color: #83dce4;
+}
+
+.report-page.theme-dark .report-page-form label {
+  color: #d1d1d1;
+}
+
+.report-page.theme-dark .report-page-form input,
+.report-page.theme-dark .report-page-form select,
+.report-page.theme-dark .report-page-form textarea {
+  border-color: #383838;
+  background: #181818;
+  color: #ededed;
+}
+
+.report-page.theme-dark .report-page-form input:focus,
+.report-page.theme-dark .report-page-form select:focus,
+.report-page.theme-dark .report-page-form textarea:focus {
+  border-color: #50aab4;
+  outline-color: rgb(85 215 230 / 14%);
+}
+
+.report-page.theme-dark .report-page-submit:not(:hover) {
+  background: #126b75;
+}
+
+.report-page.theme-dark .report-confirmation-mark {
+  background: #172b2d;
+  color: #83dce4;
+}
+
+.report-page.theme-dark .report-page-error {
+  border-color: #50302c;
+  background: #241513;
+  color: #f0aaa1;
+}

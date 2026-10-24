@@ -1,7 +1,11 @@
-import { useState } from 'react'
+import { lazy, Suspense, useState } from 'react'
 import { Link, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import AdminPage from './AdminPage.jsx'
-import PdfViewer from './PdfViewer.jsx'
+import PublicReportsPage from './PublicReportsPage.jsx'
+import ReportPage from './ReportPage.jsx'
+import ThemeProvider from './ThemeProvider.jsx'
+import { useTheme } from './theme.js'
+import ThemeToggle from './ThemeToggle.jsx'
 import {
   formatCompactRupiah,
   formatProjectDate,
@@ -9,6 +13,8 @@ import {
   useProjectData,
 } from './projectData.js'
 import './App.css'
+
+const PdfViewer = lazy(() => import('./PdfViewer.jsx'))
 
 const iconPaths = {
   grid: (
@@ -150,27 +156,17 @@ const navItems = [
   { label: 'Detail proyek', icon: 'building', to: '/detail' },
   { label: 'Dokumentasi', icon: 'camera', to: '/dokumentasi' },
   { label: 'Dokumen', icon: 'file', to: '/dokumen' },
+  { label: 'Laporan warga', icon: 'flag', to: '/laporan-warga' },
 ]
 
 function ViewerDashboard() {
   const project = useProjectData()
   const { pathname } = useLocation()
-  const [reportOpen, setReportOpen] = useState(false)
-  const [reportSent, setReportSent] = useState(false)
+  const { isDarkTheme } = useTheme()
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [notificationOpen, setNotificationOpen] = useState(false)
   const [selectedDocumentUrl, setSelectedDocumentUrl] = useState('')
-
-  function submitReport(event) {
-    event.preventDefault()
-    setReportSent(true)
-  }
-
-  function closeReport() {
-    setReportOpen(false)
-    setReportSent(false)
-  }
 
   const budgetUsedPercent = project.budgetTotal
     ? Math.min(100, Math.round((project.budgetSpent / project.budgetTotal) * 100))
@@ -186,7 +182,9 @@ function ViewerDashboard() {
   const isMobileViewport = window.matchMedia('(max-width: 850px)').matches
 
   return (
-    <div className={`app-shell ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
+    <div
+      className={`app-shell ${sidebarCollapsed ? 'sidebar-collapsed' : ''} ${isDarkTheme ? 'dark-theme' : ''}`}
+    >
       <div className="topbar" role="banner">
         
         <button
@@ -232,6 +230,7 @@ function ViewerDashboard() {
           <span className="data-badge">
             <i /> Data simulasi
           </span>
+          <ThemeToggle className="icon-button theme-toggle" />
           <Link className="admin-entry-link" to="/admin">
             Masuk admin
           </Link>
@@ -296,17 +295,14 @@ function ViewerDashboard() {
             </Link>
             )
           })}
-          <button
+          <Link
             className="nav-link report-nav-link"
-            type="button"
-            onClick={() => {
-              setReportOpen(true)
-              setMobileNavOpen(false)
-            }}
+            to="/laporan-ketidaksesuaian"
+            onClick={() => setMobileNavOpen(false)}
           >
             <Icon name="flag" size={18} />
             <span>Laporkan ketidaksesuaian</span>
-          </button>
+          </Link>
         </div>
 
         <div className="sidebar-project">
@@ -482,7 +478,7 @@ function ViewerDashboard() {
                     <div
                       className="donut-chart"
                       style={{
-                        background: `conic-gradient(#27876a 0deg ${budgetUsedPercent * 3.6}deg, #e4ede8 ${budgetUsedPercent * 3.6}deg 360deg)`,
+                        background: `conic-gradient(var(--chart-spent, #27876a) 0deg ${budgetUsedPercent * 3.6}deg, var(--chart-remaining, #e4ede8) ${budgetUsedPercent * 3.6}deg 360deg)`,
                       }}
                     >
                       <div className="donut-hole">
@@ -748,7 +744,7 @@ function ViewerDashboard() {
                   <span className="pdf-icon">PDF</span>
                   <span>
                     <strong>{project.permitDocumentName}</strong>
-                    <small>Dokumen perizinan · PDF</small>
+                    <small>Contoh dokumen IMB/PBG · PDF</small>
                   </span>
                   <span className="document-action">Lihat PDF</span>
                 </button>
@@ -776,8 +772,8 @@ function ViewerDashboard() {
                 >
                   <span className="pdf-icon">PDF</span>
                   <span>
-                    <strong>Denah bangunan</strong>
-                    <small>Gambar rencana · PDF</small>
+                    <strong>Denah Bangunan Puskesmas Prambanan</strong>
+                    <small>Contoh denah konseptual · PDF</small>
                   </span>
                   <span className="document-action">Lihat PDF</span>
                 </button>
@@ -797,7 +793,7 @@ function ViewerDashboard() {
                   : project.permitDocumentUrl || project.planDocumentUrl
               const activeDocumentName =
                 activeDocumentUrl === project.planDocumentUrl
-                  ? 'Denah bangunan'
+                  ? 'Denah Bangunan Puskesmas Prambanan'
                   : project.permitDocumentName
 
               return (
@@ -816,10 +812,18 @@ function ViewerDashboard() {
                       <Icon name="arrow" size={15} />
                     </a>
                   </div>
-                  <PdfViewer
-                    key={activeDocumentUrl}
-                    url={activeDocumentUrl}
-                  />
+                  <Suspense
+                    fallback={
+                      <div className="pdf-viewer-message" role="status">
+                        Memuat dokumen PDF...
+                      </div>
+                    }
+                  >
+                    <PdfViewer
+                      key={activeDocumentUrl}
+                      url={activeDocumentUrl}
+                    />
+                  </Suspense>
                 </div>
               )
             })()}
@@ -839,118 +843,23 @@ function ViewerDashboard() {
         </div>
       </div>
 
-      {reportOpen && (
-        <div
-          className="modal-backdrop"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) closeReport()
-          }}
-        >
-          <div
-            className="report-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="report-title"
-          >
-            <button
-              className="modal-close"
-              onClick={closeReport}
-              aria-label="Tutup"
-            >
-              <Icon name="close" size={19} />
-            </button>
-            {reportSent ? (
-              <div className="success-state">
-                <span className="success-mark">
-                  <Icon name="check" size={27} />
-                </span>
-                <span className="section-kicker">LAPORAN TERCATAT</span>
-                <h2>Terima kasih sudah ikut mengawasi.</h2>
-                <p>
-                  Laporan Anda tercatat pada sesi demo ini. Integrasi penyimpanan
-                  dan penerusan ke tim verifikasi belum terhubung.
-                </p>
-                <button className="submit-report" onClick={closeReport}>
-                  Kembali ke proyek
-                </button>
-              </div>
-            ) : (
-              <>
-                <span className="modal-icon">
-                  <Icon name="flag" size={20} />
-                </span>
-                <span className="section-kicker">RUANG LAPORAN WARGA</span>
-                <h2 id="report-title">Temukan ketidaksesuaian?</h2>
-                <p className="modal-description">
-                  Sampaikan temuan Anda agar dapat ditinjau. Laporan akan
-                  diteruskan ke tim verifikasi.
-                </p>
-                <form onSubmit={submitReport}>
-                  <label htmlFor="report-category">
-                    Jenis ketidaksesuaian
-                  </label>
-                  <select
-                    id="report-category"
-                    required
-                    defaultValue=""
-                  >
-                    <option value="" disabled>
-                      Pilih kategori laporan
-                    </option>
-                    <option>Indikasi penyimpangan material</option>
-                    <option>Dokumen perizinan tidak sesuai</option>
-                    <option>Keterlambatan waktu pembangunan</option>
-                    <option>Ketidaksesuaian kualitas pekerjaan</option>
-                    <option>Lainnya</option>
-                  </select>
-
-                  <label htmlFor="report-description">
-                    Ceritakan temuan Anda
-                  </label>
-                  <textarea
-                    id="report-description"
-                    required
-                    minLength="10"
-                    placeholder="Jelaskan lokasi, waktu, dan detail yang Anda temukan..."
-                  />
-
-                  <label htmlFor="report-contact">
-                    Email atau nomor kontak <span>(opsional)</span>
-                  </label>
-                  <input
-                    id="report-contact"
-                    type="text"
-                    placeholder="Untuk tindak lanjut laporan"
-                  />
-
-                  <div className="privacy-note">
-                    <Icon name="shield" size={15} />
-                    Jangan masukkan data sensitif. Form ini hanya simulasi dan
-                    belum mengirim data.
-                  </div>
-                  <button className="submit-report" type="submit">
-                    Kirim laporan <Icon name="send" size={16} />
-                  </button>
-                </form>
-              </>
-            )}
-          </div>
-        </div>
-      )}
     </div>
   )
 }
 
 export default function App() {
   return (
-    <Routes>
-      <Route path="/" element={<ViewerDashboard />} />
-      <Route path="/detail" element={<ViewerDashboard />} />
-      <Route path="/dokumentasi" element={<ViewerDashboard />} />
-      <Route path="/dokumen" element={<ViewerDashboard />} />
-      <Route path="/admin" element={<AdminPage />} />
-      <Route path="/admin/login" element={<AdminPage />} />
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+    <ThemeProvider>
+      <Routes>
+        <Route path="/" element={<ViewerDashboard />} />
+        <Route path="/detail" element={<ViewerDashboard />} />
+        <Route path="/dokumentasi" element={<ViewerDashboard />} />
+        <Route path="/dokumen" element={<ViewerDashboard />} />
+        <Route path="/laporan-warga" element={<PublicReportsPage />} />
+        <Route path="/laporan-ketidaksesuaian" element={<ReportPage />} />
+        <Route path="/admin/*" element={<AdminPage />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </ThemeProvider>
   )
 }
