@@ -1,8 +1,9 @@
-import { lazy, Suspense, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { Link, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import AdminPage from './AdminPage.jsx'
 import PublicReportsPage from './PublicReportsPage.jsx'
-import ReportPage from './ReportPage.jsx'
+import LandingPage from './LandingPage.jsx'
+import BrandMark from './BrandMark.jsx'
 import ThemeProvider from './ThemeProvider.jsx'
 import { useTheme } from './theme.js'
 import ThemeToggle from './ThemeToggle.jsx'
@@ -13,6 +14,7 @@ import {
   useProjectData,
 } from './projectData.js'
 import './App.css'
+import { loadReports, REPORTS_UPDATED_EVENT } from './reportData.js'
 
 const PdfViewer = lazy(() => import('./PdfViewer.jsx'))
 
@@ -152,11 +154,13 @@ function Icon({ name, size = 20, className = '' }) {
 }
 
 const navItems = [
-  { label: 'Ringkasan & anggaran', icon: 'grid', to: '/' },
+  { label: 'Ringkasan', icon: 'grid', to: '/ringkasan' },
+  { label: 'Laporan warga', icon: 'flag', to: '/laporan-warga' },
+  { label: 'Anggaran', icon: 'wallet', to: '/anggaran' },
+  { label: 'Rincian material', icon: 'wallet', to: '/anggaran/material' },
   { label: 'Detail proyek', icon: 'building', to: '/detail' },
   { label: 'Dokumentasi', icon: 'camera', to: '/dokumentasi' },
   { label: 'Dokumen', icon: 'file', to: '/dokumen' },
-  { label: 'Laporan warga', icon: 'flag', to: '/laporan-warga' },
 ]
 
 function ViewerDashboard() {
@@ -167,23 +171,87 @@ function ViewerDashboard() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [notificationOpen, setNotificationOpen] = useState(false)
   const [selectedDocumentUrl, setSelectedDocumentUrl] = useState('')
+  const [showAllUpdates, setShowAllUpdates] = useState(false)
+  const [reportCount, setReportCount] = useState(0)
+  const [reportCountError, setReportCountError] = useState('')
+  const [periodYear, setPeriodYear] = useState(String(project.year))
 
-  const budgetUsedPercent = project.budgetTotal
-    ? Math.min(100, Math.round((project.budgetSpent / project.budgetTotal) * 100))
+  const currentFiscalData = {
+    budgetTotal: project.budgetTotal,
+    budgetSpent: project.budgetSpent,
+  }
+  const selectedFiscalData =
+    pathname === '/anggaran'
+      ? project.budgetHistory?.[periodYear] || currentFiscalData
+      : currentFiscalData
+  const periodScale = project.budgetSpent
+    ? selectedFiscalData.budgetSpent / project.budgetSpent
+    : 1
+  const budgetUsedPercent = selectedFiscalData.budgetTotal
+    ? Math.min(
+        100,
+        Math.round(
+          (selectedFiscalData.budgetSpent / selectedFiscalData.budgetTotal) * 100,
+        ),
+      )
     : 0
-  const budgetRemaining = Math.max(project.budgetTotal - project.budgetSpent, 0)
+  const budgetRemaining = Math.max(
+    selectedFiscalData.budgetTotal - selectedFiscalData.budgetSpent,
+    0,
+  )
   const dateRange = `${formatProjectDate(project.startDate)} — ${formatProjectDate(project.endDate)}`
   const projectProgress = Math.min(100, Math.max(0, Number(project.progress)))
   const currentPage = navItems.find((item) => item.to === pathname)
-  const isOverview = pathname === '/'
+  const isOverview = pathname === '/ringkasan'
+  const isBudget = pathname === '/anggaran'
   const isProjectDetails = pathname === '/detail'
   const isDocumentation = pathname === '/dokumentasi'
   const isDocuments = pathname === '/dokumen'
+  const isMaterialDetails = pathname === '/anggaran/material'
   const isMobileViewport = window.matchMedia('(max-width: 850px)').matches
+  const currentView = isBudget
+    ? 'budget'
+    : isMaterialDetails
+      ? 'materials'
+      : isProjectDetails
+      ? 'detail'
+      : isDocumentation
+        ? 'documentation'
+        : isDocuments
+          ? 'documents'
+          : 'overview'
+  const visibleUpdates = showAllUpdates
+    ? project.updates
+    : project.updates.slice(0, 3)
+  const currentYear = new Date().getFullYear()
+  const periodYears = Array.from(
+    { length: Math.max(1, currentYear - 2024 + 1) },
+    (_, index) => String(currentYear - index),
+  )
+
+  useEffect(() => {
+    function refreshReportCount() {
+      try {
+        setReportCount(loadReports().length)
+        setReportCountError('')
+      } catch (error) {
+        console.error('Gagal menghitung laporan warga.', error)
+        setReportCountError('Jumlah laporan tidak dapat dimuat.')
+      }
+    }
+
+    refreshReportCount()
+    window.addEventListener(REPORTS_UPDATED_EVENT, refreshReportCount)
+    window.addEventListener('storage', refreshReportCount)
+    return () => {
+      window.removeEventListener(REPORTS_UPDATED_EVENT, refreshReportCount)
+      window.removeEventListener('storage', refreshReportCount)
+    }
+  }, [])
 
   return (
     <div
-      className={`app-shell ${sidebarCollapsed ? 'sidebar-collapsed' : ''} ${isDarkTheme ? 'dark-theme' : ''}`}
+      className={`app-shell view-${currentView} ${sidebarCollapsed ? 'sidebar-collapsed' : ''} ${isDarkTheme ? 'dark-theme' : ''}`}
     >
       <div className="topbar" role="banner">
         
@@ -211,32 +279,29 @@ function ViewerDashboard() {
         >
           <Icon name="menu" />
         </button>
-        <Link className="brand topbar-brand" to="/" aria-label="InFrastuktur">
+        <Link className="brand topbar-brand" to="/ringkasan" aria-label="InFrastuktur">
           <span className="brand-mark">
-            <Icon name="building" size={18} />
+            <BrandMark />
           </span>
           <span className="brand-name">
             In<span>Frastuktur</span>
           </span>
         </Link>
         <div className="breadcrumb">
-          <Link to="/">Proyek publik</Link>
+          <Link to="/ringkasan">Proyek publik</Link>
           <Icon name="chevron" size={14} />
           <strong>
             {isOverview ? project.name : currentPage?.label || project.name}
           </strong>
         </div>
         <div className="topbar-actions">
-          <span className="data-badge">
+          {/* <span className="data-badge">
             <i /> Data simulasi
-          </span>
+          </span> */}
           <ThemeToggle className="icon-button theme-toggle" />
-          <Link className="admin-entry-link" to="/admin">
-            Masuk admin
+          <Link className="topbar-landing-link" to="/">
+            Beranda
           </Link>
-          <button className="icon-button search-button" aria-label="Cari">
-            <Icon name="search" />
-          </button>
           <div className="notification-wrap">
             <button
               className={`icon-button ${notificationOpen ? 'button-selected' : ''}`}
@@ -295,14 +360,6 @@ function ViewerDashboard() {
             </Link>
             )
           })}
-          <Link
-            className="nav-link report-nav-link"
-            to="/laporan-ketidaksesuaian"
-            onClick={() => setMobileNavOpen(false)}
-          >
-            <Icon name="flag" size={18} />
-            <span>Laporkan ketidaksesuaian</span>
-          </Link>
         </div>
 
         <div className="sidebar-project">
@@ -315,7 +372,14 @@ function ViewerDashboard() {
           </div>
           <i className="online-dot" />
         </div>
-
+        <div className="sidebar-access-links">
+          <Link className="sidebar-login-link sidebar-admin-link" to="/login">
+            Masuk admin
+          </Link>
+          <Link className="sidebar-login-link sidebar-reporter-link" to="/login">
+            Masuk reporter
+          </Link>
+        </div>
       </div>
       {mobileNavOpen && (
         <button
@@ -331,12 +395,22 @@ function ViewerDashboard() {
         id="ringkasan"
         role="main"
       >
-        <div className="page-container">
+        <div className="page-container" key={pathname}>
           {!isOverview && (
             <div className="route-heading">
               <span className="section-kicker">PROYEK PUBLIK</span>
-              <h1>{currentPage?.label}</h1>
+              <h1>
+                {isMaterialDetails
+                  ? 'Rincian material'
+                  : isBudget
+                    ? 'Anggaran proyek'
+                    : currentPage?.label}
+              </h1>
               <p>
+                {isBudget &&
+                  'Rincian anggaran, realisasi, dan penggunaan material proyek.'}
+                {isMaterialDetails &&
+                  'Jenis material, nilai pengadaan, dan kebutuhan penggunaannya dalam pembangunan.'}
                 {isProjectDetails &&
                   `Informasi lengkap tentang ${project.name}, lokasi, pelaksana, dan jadwal pengerjaan.`}
                 {isDocumentation &&
@@ -347,16 +421,14 @@ function ViewerDashboard() {
             </div>
           )}
 
-          {(isOverview || isProjectDetails) && (
+          {isOverview && (
           <div className="project-hero" role="region" aria-label="Detail proyek">
             <div className="hero-image">
               <img
                 src={project.projectImage}
                 alt={`Pekerjaan konstruksi ${project.name}`}
               />
-              <span className="image-label">
-                <span className="live-dot" /> PEMBANGUNAN BERJALAN
-              </span>
+
               <span className="image-credit">
                 Dokumentasi proyek · {formatProjectDate(project.updates[0]?.date)}
               </span>
@@ -367,7 +439,7 @@ function ViewerDashboard() {
                 <span className="eyebrow-divider">·</span>
                 <span>TAHUN ANGGARAN {project.year}</span>
               </div>
-              <h1>
+              <h1 className="project-hero-title">
                 Pembangunan<br className="desktop-break" /> {project.name}
               </h1>
               <p className="hero-description">
@@ -402,7 +474,7 @@ function ViewerDashboard() {
           </div>
           )}
 
-          {isOverview && <div className="stats-grid" role="region" aria-label="Ringkasan proyek">
+          {(isOverview || isProjectDetails) && <div className="stats-grid" role="region" aria-label="Ringkasan proyek">
             <div className="stat-card budget-stat">
               <div className="stat-top">
                 <span>Total anggaran proyek</span>
@@ -411,13 +483,13 @@ function ViewerDashboard() {
                 </span>
               </div>
               <strong className="stat-value">
-              {formatCompactRupiah(project.budgetTotal)}
+              {formatCompactRupiah(selectedFiscalData.budgetTotal)}
               </strong>
               <div className="stat-bottom">
                 <span>
                   <i className="green-dot" /> {budgetUsedPercent}% anggaran terserap
                 </span>
-                <span>Realisasi {formatCompactRupiah(project.budgetSpent)}</span>
+                <span>Realisasi {formatCompactRupiah(selectedFiscalData.budgetSpent)}</span>
               </div>
               <div className="mini-progress">
                 <span style={{ width: `${budgetUsedPercent}%` }} />
@@ -461,24 +533,54 @@ function ViewerDashboard() {
                 <i className="green-dot" /> Masih dalam jadwal
               </div>
             </div>
+            {isOverview && (
+              <Link className="stat-card reports-stat" to="/laporan-warga">
+                <div className="stat-top">
+                  <span>Laporan warga</span>
+                  <span className="stat-icon orange-icon">
+                    <Icon name="flag" size={18} />
+                  </span>
+                </div>
+                <strong className="stat-value">{reportCount}</strong>
+                <div className="stat-bottom">
+                  <span>Masukan masyarakat</span>
+                  <span>Lihat laporan <Icon name="arrow" size={13} /></span>
+                </div>
+                {reportCountError && (
+                  <small className="report-count-error" role="status">
+                    {reportCountError}
+                  </small>
+                )}
+              </Link>
+            )}
           </div>}
 
-          <div className={`content-grid ${isOverview ? 'content-grid-overview' : 'content-grid-single'}`}>
-            {isOverview && (
+          <div className={`content-grid ${isBudget ? 'content-grid-overview' : 'content-grid-single'}`}>
+            {isBudget && (
             <div className="panel budget-panel">
               <div className="budget-top-section">
                 <div className="budget-overview">
                   <div className="panel-heading">
                     <div><span className="section-kicker">TRANSPARANSI ANGGARAN</span><h2>Ke mana anggaran digunakan?</h2><p>Rincian realisasi per kategori pengeluaran</p></div>
-                    <button className="period-select">
-                      Tahun {project.year} <span>⌄</span>
-                    </button>
+                    <label className="period-select">
+                      <span className="sr-only">Pilih tahun anggaran</span>
+                      <select
+                        value={periodYear}
+                        onChange={(event) => setPeriodYear(event.target.value)}
+                      >
+                        {periodYears.map((year) => (
+                          <option key={year} value={year}>
+                            Tahun {year}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
                   </div>
                   <div className="budget-summary">
                     <div
                       className="donut-chart"
                       style={{
-                        background: `conic-gradient(var(--chart-spent, #27876a) 0deg ${budgetUsedPercent * 3.6}deg, var(--chart-remaining, #e4ede8) ${budgetUsedPercent * 3.6}deg 360deg)`,
+                        background: `conic-gradient(var(--chart-spent, #087f9d) 0deg ${budgetUsedPercent * 3.6}deg, var(--chart-remaining, #e4ede8) ${budgetUsedPercent * 3.6}deg 360deg)`,
                       }}
                     >
                       <div className="donut-hole">
@@ -488,11 +590,11 @@ function ViewerDashboard() {
                     </div>
                     <div className="budget-numbers">
                       <span>Total anggaran disetujui</span>
-                      <strong>{formatRupiah(project.budgetTotal)}</strong>
+                      <strong>{formatRupiah(selectedFiscalData.budgetTotal)}</strong>
                       <div className="budget-legend">
                         <span>
                           <i className="legend-spent" /> Sudah digunakan
-                          <b>{formatCompactRupiah(project.budgetSpent)}</b>
+                          <b>{formatCompactRupiah(selectedFiscalData.budgetSpent)}</b>
                         </span>
                         <span>
                           <i className="legend-remaining" /> Sisa anggaran
@@ -508,9 +610,9 @@ function ViewerDashboard() {
                       <h3>Rincian pengeluaran material</h3>
                       <span>Spesifikasi material dan nilai pembelian</span>
                     </div>
-                    <button className="text-button">
+                    <Link className="text-button" to="/anggaran/material">
                       Lihat semua <Icon name="arrow" size={14} />
-                    </button>
+                    </Link>
                   </div>
                   <div className="material-table">
                     {project.materials.map((item) => (
@@ -524,7 +626,7 @@ function ViewerDashboard() {
                           <span style={{ width: `${item.percent}%` }} />
                         </div>
                         <strong className="material-amount">
-                          {formatRupiah(item.amount)}
+                          {formatRupiah(item.amount * periodScale)}
                         </strong>
                       </div>
                     ))}
@@ -546,7 +648,7 @@ function ViewerDashboard() {
                       <span>{category.detail}</span>
                     </div>
                     <div className="category-amount">
-                      <strong>{formatRupiah(category.amount)}</strong>
+                      <strong>{formatRupiah(category.amount * periodScale)}</strong>
                       <span>
                         {project.budgetSpent
                           ? Math.round((category.amount / project.budgetSpent) * 100)
@@ -568,7 +670,44 @@ function ViewerDashboard() {
             </div>
             )}
 
-            <div className="right-column">
+            {isMaterialDetails && (
+              <section className="panel material-details-panel">
+                <div className="panel-heading">
+                  <div>
+                    <span className="section-kicker">RINCIAN PENGADAAN</span>
+                    <h2>Material dan kebutuhan proyek</h2>
+                    <p>
+                      Daftar material beserta spesifikasi, keperluan, dan
+                      realisasi biayanya.
+                    </p>
+                  </div>
+                </div>
+                <div className="material-detail-grid">
+                  {project.materials.map((item, index) => (
+                    <article
+                      className="material-detail-card"
+                      key={`${item.name}-${index}`}
+                    >
+                      <div className="material-detail-heading">
+                        <span>0{index + 1} · MATERIAL</span>
+                        <strong>{item.name}</strong>
+                        <small>{item.detail}</small>
+                      </div>
+                      <p>
+                        {item.purpose ||
+                          'Digunakan untuk pekerjaan struktur dan penyelesaian bangunan sesuai spesifikasi proyek.'}
+                      </p>
+                      <div className="material-detail-footer">
+                        <span>Realisasi pengadaan</span>
+                        <strong>{formatRupiah(item.amount)}</strong>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {(isProjectDetails || isDocumentation) && <div className="right-column">
               {isProjectDetails && (
               <div className="panel info-panel">
                 <div className="panel-heading compact-heading">
@@ -664,16 +803,16 @@ function ViewerDashboard() {
                     <span className="section-kicker">LAPORAN HARIAN</span>
                     <h2>Progres di lapangan</h2>
                   </div>
-                  <button
-                    className="round-arrow"
-                    aria-label="Lihat seluruh dokumentasi"
-                  >
-                    <Icon name="arrow" size={16} />
-                  </button>
+                  <span className="timeline-count">
+                    {project.updates.length} progres
+                  </span>
                 </div>
-                <div className="timeline-list">
+                <div
+                  className={`timeline-list ${showAllUpdates ? 'timeline-list-expanded' : 'timeline-list-compact'}`}
+                  id="timeline-list"
+                >
                   {project.updates.length > 0 ? (
-                    project.updates.map((item, index) => (
+                    visibleUpdates.map((item, index) => (
                       <div className="timeline-item" key={item.id}>
                         <div
                           className={`timeline-marker ${
@@ -687,6 +826,20 @@ function ViewerDashboard() {
                             {formatProjectDate(item.date)}
                             <span>{item.time}</span>
                           </div>
+                          {!item.image && (
+                            <div
+                              className="missing-progress-photo"
+                              role="alert"
+                              aria-label="Dokumentasi foto progres tidak tersedia"
+                            >
+                              <strong>TIDAK ADA FOTO</strong>
+                              <Link
+                                to={`/laporan-warga?view=submit&progress=${encodeURIComponent(item.id)}&issue=missing-photo`}
+                              >
+                                Laporkan.
+                              </Link>
+                            </div>
+                          )}
                           <strong>{item.title}</strong>
                           <p>{item.note}</p>
                           {item.image && (
@@ -704,16 +857,22 @@ function ViewerDashboard() {
                     </div>
                   )}
                 </div>
-                <Link
+                <button
                   className="view-updates"
-                  to="/"
+                  type="button"
+                  aria-expanded={showAllUpdates}
+                  aria-controls="timeline-list"
+                  onClick={() => setShowAllUpdates((isExpanded) => !isExpanded)}
                 >
-                  Kembali ke ringkasan <Icon name="arrow" size={15} />
-                </Link>
+                  {showAllUpdates
+                    ? 'Ringkas progres'
+                    : 'Lihat semua progres'}
+                  <Icon name="arrow" size={15} />
+                </button>
               </div>
               )}
 
-            </div>
+            </div>}
           </div>
 
           {isDocuments && (
@@ -727,56 +886,76 @@ function ViewerDashboard() {
             </div>
             <div className="documents-list">
               {project.permitDocumentUrl ? (
-                <button
-                  className={`document-link document-select${
-                    (selectedDocumentUrl || project.permitDocumentUrl) ===
-                    project.permitDocumentUrl
-                      ? ' document-selected'
-                      : ''
-                  }`}
-                  type="button"
-                  onClick={() => setSelectedDocumentUrl(project.permitDocumentUrl)}
-                  aria-pressed={
-                    (selectedDocumentUrl || project.permitDocumentUrl) ===
-                    project.permitDocumentUrl
-                  }
-                >
-                  <span className="pdf-icon">PDF</span>
-                  <span>
-                    <strong>{project.permitDocumentName}</strong>
-                    <small>Contoh dokumen IMB/PBG · PDF</small>
-                  </span>
-                  <span className="document-action">Lihat PDF</span>
-                </button>
+                <div className="document-list-item">
+                  <button
+                    className={`document-link document-select${
+                      (selectedDocumentUrl || project.permitDocumentUrl) ===
+                      project.permitDocumentUrl
+                        ? ' document-selected'
+                        : ''
+                    }`}
+                    type="button"
+                    onClick={() => setSelectedDocumentUrl(project.permitDocumentUrl)}
+                    aria-pressed={
+                      (selectedDocumentUrl || project.permitDocumentUrl) ===
+                      project.permitDocumentUrl
+                    }
+                  >
+                    <span className="pdf-icon">PDF</span>
+                    <span>
+                      <strong>{project.permitDocumentName}</strong>
+                      <small>Contoh dokumen IMB/PBG · PDF</small>
+                    </span>
+                    <span className="document-action">Lihat PDF</span>
+                  </button>
+                  <a
+                    className="document-download-link"
+                    href={project.permitDocumentUrl}
+                    download
+                    aria-label={`Unduh ${project.permitDocumentName}`}
+                  >
+                    <Icon name="download" size={16} /> Unduh
+                  </a>
+                </div>
               ) : (
                 <div className="document-empty">
                   Dokumen perizinan belum tersedia.
                 </div>
               )}
               {project.planDocumentUrl ? (
-                <button
-                  className={`document-link document-select${
-                    (selectedDocumentUrl ||
-                      project.permitDocumentUrl ||
-                      project.planDocumentUrl) === project.planDocumentUrl
-                      ? ' document-selected'
-                      : ''
-                  }`}
-                  type="button"
-                  onClick={() => setSelectedDocumentUrl(project.planDocumentUrl)}
-                  aria-pressed={
-                    (selectedDocumentUrl ||
-                      project.permitDocumentUrl ||
-                      project.planDocumentUrl) === project.planDocumentUrl
-                  }
-                >
-                  <span className="pdf-icon">PDF</span>
-                  <span>
-                    <strong>Denah Bangunan Puskesmas Prambanan</strong>
-                    <small>Contoh denah konseptual · PDF</small>
-                  </span>
-                  <span className="document-action">Lihat PDF</span>
-                </button>
+                <div className="document-list-item">
+                  <button
+                    className={`document-link document-select${
+                      (selectedDocumentUrl ||
+                        project.permitDocumentUrl ||
+                        project.planDocumentUrl) === project.planDocumentUrl
+                        ? ' document-selected'
+                        : ''
+                    }`}
+                    type="button"
+                    onClick={() => setSelectedDocumentUrl(project.planDocumentUrl)}
+                    aria-pressed={
+                      (selectedDocumentUrl ||
+                        project.permitDocumentUrl ||
+                        project.planDocumentUrl) === project.planDocumentUrl
+                    }
+                  >
+                    <span className="pdf-icon">PDF</span>
+                    <span>
+                      <strong>Denah Bangunan Puskesmas Prambanan</strong>
+                      <small>Contoh denah konseptual · PDF</small>
+                    </span>
+                    <span className="document-action">Lihat PDF</span>
+                  </button>
+                  <a
+                    className="document-download-link"
+                    href={project.planDocumentUrl}
+                    download
+                    aria-label="Unduh denah bangunan"
+                  >
+                    <Icon name="download" size={16} /> Unduh
+                  </a>
+                </div>
               ) : (
                 <div className="document-empty">
                   Denah bangunan belum diunggah.
@@ -851,14 +1030,22 @@ export default function App() {
   return (
     <ThemeProvider>
       <Routes>
-        <Route path="/" element={<ViewerDashboard />} />
+        <Route path="/" element={<LandingPage />} />
+        <Route path="/ringkasan" element={<ViewerDashboard />} />
+        <Route path="/anggaran" element={<ViewerDashboard />} />
+        <Route path="/anggaran/material" element={<ViewerDashboard />} />
         <Route path="/detail" element={<ViewerDashboard />} />
         <Route path="/dokumentasi" element={<ViewerDashboard />} />
         <Route path="/dokumen" element={<ViewerDashboard />} />
         <Route path="/laporan-warga" element={<PublicReportsPage />} />
-        <Route path="/laporan-ketidaksesuaian" element={<ReportPage />} />
+        <Route
+          path="/laporan-ketidaksesuaian"
+          element={<Navigate to="/laporan-warga?view=submit" replace />}
+        />
+        <Route path="/login" element={<AdminPage />} />
         <Route path="/admin/*" element={<AdminPage />} />
-        <Route path="*" element={<Navigate to="/" replace />} />
+        <Route path="/reporter/*" element={<AdminPage />} />
+        <Route path="*" element={<Navigate to="/ringkasan" replace />} />
       </Routes>
     </ThemeProvider>
   )

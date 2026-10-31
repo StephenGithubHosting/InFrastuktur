@@ -6,10 +6,17 @@ Dashboard transparansi proyek infrastruktur publik untuk memantau anggaran, prog
 
 - Ringkasan proyek, progres pembangunan, dan penyerapan anggaran.
 - Rincian kategori anggaran dan pengeluaran material.
+- Realisasi anggaran otomatis menjumlahkan semua pengeluaran material dan
+  kategori lain; kategori yang ditandai sebagai rincian material mengikuti total
+  material dan tidak dihitung dua kali.
 - Detail proyek mencakup kontraktor, lokasi, jadwal, dan nomor kontrak.
 - Dokumentasi progres lapangan berupa foto dan laporan berkala.
 - Daftar serta pratinjau dokumen proyek dalam format PDF.
 - Panel admin demo untuk mengubah atau memulihkan data proyek.
+- Panel reporter untuk mengirim progres pekerjaan lapangan dan melihat rincian
+  anggaran.
+- Reporter dapat memilih foto dokumentasi dari perangkat atau mengambil foto
+  melalui kamera; foto diperkecil sebelum disimpan pada browser.
 - Formulir laporan ketidaksesuaian dan daftar laporan publik.
 - Inbox admin untuk meninjau laporan dan memperbarui status tindak lanjut.
 - Tema gelap/terang yang tersimpan dan tersinkron saat berpindah halaman.
@@ -57,7 +64,8 @@ npm run lint     # Jalankan ESLint
 
 ## Halaman aplikasi
 
-- `/` — ringkasan proyek dan anggaran.
+- `/` — landing page informasi infrastruktur publik.
+- `/ringkasan` — ringkasan proyek dan anggaran.
 - `/detail` — detail informasi proyek.
 - `/dokumentasi` — laporan dan foto progres lapangan.
 - `/dokumen` — daftar dan pratinjau dokumen proyek.
@@ -65,13 +73,14 @@ npm run lint     # Jalankan ESLint
 - `/laporan-ketidaksesuaian` — formulir laporan masyarakat.
 - `/admin` — panel administrasi demo.
 - `/admin/laporan-ketidaksesuaian` — daftar dan status laporan masyarakat.
+- `/reporter/login` — masuk ke area reporter.
 
-## Akun demo admin
+## Akun demo
 
-- Email: `admin@infrastuktur.id`
-- Kata sandi: `admin123`
+- Admin: `admin@infrastuktur.id` / `admin123`
+- Reporter: `reporter@infrastuktur.id` / `reporter123`
 
-Panel admin hanya untuk prototipe. Login tidak menggunakan autentikasi backend, dan perubahan data termasuk laporan disimpan secara lokal di browser (`localStorage`). Halaman laporan publik hanya menampilkan laporan yang tersimpan pada browser ini; kiriman dari pengguna di perangkat lain tidak akan masuk ke daftar tanpa integrasi backend dan database. Jangan gunakan untuk melindungi atau mengelola data sungguhan.
+Panel admin dan reporter hanya untuk prototipe. Login berbasis browser tanpa autentikasi backend, sehingga pembatasan peran bukan perlindungan untuk data sungguhan. Reporter dapat mengirim progres pekerjaan, progres terbaru akan tampil pada dokumentasi publik. Perubahan data proyek termasuk progres disimpan secara lokal di browser (`localStorage`) dan belum tersinkron ke perangkat lain tanpa backend dan database.
 
 ## Catatan
 

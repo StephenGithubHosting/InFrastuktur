@@ -20,7 +20,12 @@ export const DEFAULT_PROJECT_DATA = {
   targetProgress: 60,
   monthlyProgress: 8,
   budgetTotal: 4850000000,
-  budgetSpent: 3290000000,
+  budgetSpent: 1737650000,
+  budgetHistory: {
+    2024: { budgetTotal: 3850000000, budgetSpent: 2910000000 },
+    2025: { budgetTotal: 4250000000, budgetSpent: 3375000000 },
+    2026: { budgetTotal: 4850000000, budgetSpent: 1737650000 },
+  },
   projectImage:
     'https://images.unsplash.com/photo-1541888946425-d81bb19240f5?auto=format&fit=crop&w=1500&q=85',
   permitDocumentName: 'Contoh Permohonan IMB/PBG (Draf)',
@@ -30,7 +35,8 @@ export const DEFAULT_PROJECT_DATA = {
     {
       name: 'Konstruksi & material',
       detail: 'Material, struktur, dan finishing',
-      amount: 2140000000,
+      amount: 587650000,
+      materialCategory: true,
     },
     {
       name: 'Tenaga kerja',
@@ -50,6 +56,7 @@ export const DEFAULT_PROJECT_DATA = {
       amount: 186400000,
       percent: 72,
       color: 'mint',
+      purpose: 'Perekat pasangan bata, plesteran, dan pekerjaan beton non-struktural.',
     },
     {
       name: 'Pasir pasang',
@@ -57,6 +64,7 @@ export const DEFAULT_PROJECT_DATA = {
       amount: 94500000,
       percent: 58,
       color: 'blue',
+      purpose: 'Campuran pasangan bata dan mortar untuk pekerjaan dinding.',
     },
     {
       name: 'Besi beton',
@@ -64,6 +72,7 @@ export const DEFAULT_PROJECT_DATA = {
       amount: 238750000,
       percent: 86,
       color: 'orange',
+      purpose: 'Tulangan kolom, balok, pelat, dan elemen struktur bangunan.',
     },
     {
       name: 'Batu split',
@@ -71,6 +80,7 @@ export const DEFAULT_PROJECT_DATA = {
       amount: 68000000,
       percent: 46,
       color: 'purple',
+      purpose: 'Agregat untuk campuran beton dan lapisan dasar konstruksi.',
     },
   ],
   updates: [
@@ -101,11 +111,103 @@ export const DEFAULT_PROJECT_DATA = {
       image:
         'https://images.unsplash.com/photo-1503387762-592deb58ef4e?auto=format&fit=crop&w=650&q=75',
     },
+    {
+      id: 'update-4',
+      date: '2026-09-30',
+      time: '09:15 WIB',
+      title: 'Bangunan mencapai tahap setengah jadi',
+      note: 'Struktur utama dan sebagian dinding lantai 1–2 telah terbentuk. Pekerjaan berlanjut pada dinding, instalasi awal, dan penyelesaian struktur.',
+      image:
+        'https://images.unsplash.com/photo-1541888946425-d81bb19240f5?auto=format&fit=crop&w=650&q=75',
+    },
+    {
+      id: 'update-5',
+      date: '2026-08-12',
+      time: '10:30 WIB',
+      title: 'Pekerjaan struktur lantai 2',
+      note: 'Pengecoran pelat lantai 2 dilanjutkan setelah pemeriksaan tulangan dan bekisting.',
+      image:
+        'https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&w=650&q=75',
+    },
+    {
+      id: 'update-6',
+      date: '2026-06-28',
+      time: '08:50 WIB',
+      title: 'Kolom dan balok lantai 1',
+      note: 'Struktur kolom dan balok lantai 1 dikerjakan bertahap, termasuk pemeriksaan dimensi dan mutu beton.',
+      image:
+        'https://images.unsplash.com/photo-1503387762-592deb58ef4e?auto=format&fit=crop&w=650&q=75',
+    },
+    {
+      id: 'update-7',
+      date: '2026-05-20',
+      time: '13:20 WIB',
+      title: 'Pengecoran fondasi bangunan',
+      note: 'Pengecoran fondasi dilakukan setelah pemeriksaan pembesian dan kesiapan area kerja.',
+      image:
+        'https://images.unsplash.com/photo-1541888946425-d81bb19240f5?auto=format&fit=crop&w=650&q=75',
+    },
+    {
+      id: 'update-8',
+      date: '2026-04-18',
+      time: '09:05 WIB',
+      title: 'Penggalian dan persiapan fondasi',
+      note: 'Penggalian mengikuti denah kerja. Dasar galian dirapikan dan dipadatkan sebelum pekerjaan fondasi dimulai.',
+      image:
+        'https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&w=650&q=75',
+    },
+    {
+      id: 'update-9',
+      date: '2026-03-12',
+      time: '08:30 WIB',
+      title: 'Pembongkaran dan pembersihan lahan',
+      note: 'Material sisa bangunan dibongkar dan area dibersihkan sebagai tahap awal persiapan lokasi pembangunan.',
+      image:
+        'https://images.unsplash.com/photo-1503387762-592deb58ef4e?auto=format&fit=crop&w=650&q=75',
+    },
   ],
 }
 
 function cloneDefaultData() {
-  return structuredClone(DEFAULT_PROJECT_DATA)
+  const project = structuredClone(DEFAULT_PROJECT_DATA)
+  project.categories = synchronizeMaterialCategoryAmounts(
+    project.categories,
+    project.materials,
+  )
+  project.budgetSpent = calculateBudgetRealization(
+    project.categories,
+    project.materials,
+  )
+  return project
+}
+
+export function calculateMaterialTotal(materials = []) {
+  return materials.reduce(
+    (total, material) => total + Number(material.amount || 0),
+    0,
+  )
+}
+
+export function synchronizeMaterialCategoryAmounts(
+  categories = [],
+  materials = [],
+) {
+  const materialTotal = calculateMaterialTotal(materials)
+
+  return categories.map((category) =>
+    category.materialCategory
+      ? { ...category, amount: materialTotal }
+      : category,
+  )
+}
+
+export function calculateBudgetRealization(categories = [], materials = []) {
+  const otherCategoryExpenses = categories.reduce(
+    (total, category) =>
+      category.materialCategory ? total : total + Number(category.amount || 0),
+    0,
+  )
+  return otherCategoryExpenses + calculateMaterialTotal(materials)
 }
 
 export function loadProjectData() {
@@ -116,10 +218,58 @@ export function loadProjectData() {
   }
 
   try {
+    const savedProject = JSON.parse(savedData)
+    const defaultProject = cloneDefaultData()
+    const savedUpdates = Array.isArray(savedProject.updates)
+      ? savedProject.updates
+      : defaultProject.updates
+    const savedUpdateIds = new Set(savedUpdates.map((update) => update.id))
     const project = {
-      ...cloneDefaultData(),
-      ...JSON.parse(savedData),
+      ...defaultProject,
+      ...savedProject,
+      categories: (
+        Array.isArray(savedProject.categories)
+          ? savedProject.categories
+          : defaultProject.categories
+      ).map((category) => ({
+        ...category,
+        materialCategory:
+          typeof category.materialCategory === 'boolean'
+            ? category.materialCategory
+            : /material|bahan/i.test(category.name || ''),
+      })),
+      materials: Array.isArray(savedProject.materials)
+        ? savedProject.materials
+        : defaultProject.materials,
+      updates: [
+        ...savedUpdates,
+        ...defaultProject.updates.filter(
+          (update) => !savedUpdateIds.has(update.id),
+        ),
+      ].sort((first, second) =>
+        String(second.date).localeCompare(String(first.date)),
+      ),
     }
+    project.budgetSpent = calculateBudgetRealization(
+      project.categories,
+      Array.isArray(project.materials) ? project.materials : [],
+    )
+    project.budgetHistory = {
+      ...defaultProject.budgetHistory,
+      ...(savedProject.budgetHistory &&
+      typeof savedProject.budgetHistory === 'object' &&
+      !Array.isArray(savedProject.budgetHistory)
+        ? savedProject.budgetHistory
+        : {}),
+      [String(project.year)]: {
+        budgetTotal: Number(project.budgetTotal),
+        budgetSpent: project.budgetSpent,
+      },
+    }
+    project.categories = synchronizeMaterialCategoryAmounts(
+      project.categories,
+      project.materials,
+    )
 
     if (
       project.permitDocumentUrl === DEFAULT_PROJECT_DATA.permitDocumentUrl &&
@@ -140,7 +290,26 @@ export function loadProjectData() {
 }
 
 export function saveProjectData(project) {
-  localStorage.setItem(PROJECT_STORAGE_KEY, JSON.stringify(project))
+  const budgetSpent = calculateBudgetRealization(
+    project.categories,
+    project.materials,
+  )
+  const projectToSave = {
+    ...project,
+    budgetHistory: {
+      ...(project.budgetHistory || {}),
+      [String(project.year)]: {
+        budgetTotal: Number(project.budgetTotal),
+        budgetSpent,
+      },
+    },
+    categories: synchronizeMaterialCategoryAmounts(
+      project.categories,
+      project.materials,
+    ),
+    budgetSpent,
+  }
+  localStorage.setItem(PROJECT_STORAGE_KEY, JSON.stringify(projectToSave))
   window.dispatchEvent(new Event('project-data-updated'))
 }
 

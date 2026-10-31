@@ -1,10 +1,12 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
+import BrandMark from './BrandMark.jsx'
 import { useTheme } from './theme.js'
 import {
   REPORT_STATUSES,
   submitReport as saveReport,
 } from './reportData.js'
+import { formatProjectDate, useProjectData } from './projectData.js'
 import ThemeToggle from './ThemeToggle.jsx'
 import './ReportPage.css'
 
@@ -13,11 +15,22 @@ const REPORT_CATEGORIES = [
   'Dokumen perizinan tidak sesuai',
   'Keterlambatan waktu pembangunan',
   'Ketidaksesuaian kualitas pekerjaan',
+  'Tidak ada foto pada Progres',
   'Lainnya',
 ]
 
-export default function ReportPage() {
+export default function ReportPage({ embedded = false, reporterMode = false }) {
   const { isDarkTheme } = useTheme()
+  const [searchParams] = useSearchParams()
+  const project = useProjectData()
+  const relatedProgressId = searchParams.get('progress') || ''
+  const relatedProgress = project.updates.find(
+    (update) => update.id === relatedProgressId,
+  )
+  const isMissingPhotoReport = searchParams.get('issue') === 'missing-photo'
+  const missingPhotoDescription = relatedProgress
+    ? `Tidak ada foto dokumentasi pada progres "${relatedProgress.title}" (${formatProjectDate(relatedProgress.date)}). Mohon verifikasi dan unggah foto dokumentasi yang sesuai.`
+    : 'Tidak ada foto dokumentasi pada progres yang dilaporkan. Mohon verifikasi dan unggah foto dokumentasi yang sesuai.'
   const [savedReport, setSavedReport] = useState(null)
   const [errorMessage, setErrorMessage] = useState('')
 
@@ -32,6 +45,7 @@ export default function ReportPage() {
         category: String(formData.get('category') || ''),
         location: String(formData.get('location') || '').trim(),
         description: String(formData.get('description') || '').trim(),
+        relatedProgressId,
       })
       setSavedReport(report)
       setErrorMessage('')
@@ -43,22 +57,32 @@ export default function ReportPage() {
     }
   }
 
-  return (
-    <div className={`report-page ${isDarkTheme ? 'theme-dark' : ''}`}>
-      <header className="report-page-header">
-        <Link className="report-page-brand" to="/">
-          <span className="report-page-brand-mark">I</span>
-          <span>InFrastuktur</span>
-        </Link>
-        <div className="report-page-header-actions">
-          <ThemeToggle />
-          <Link className="report-back-link" to="/laporan-warga">
-            Lihat laporan warga
-          </Link>
-        </div>
-      </header>
+  const ContentWrapper = embedded ? 'div' : 'main'
 
-      <main className="report-page-content">
+  return (
+    <div
+      className={`report-page ${isDarkTheme ? 'theme-dark' : ''} ${embedded ? 'report-page-embedded' : ''}`}
+    >
+      {!embedded && (
+        <header className="report-page-header">
+          <Link className="report-page-brand" to="/ringkasan">
+            <span className="report-page-brand-mark"><BrandMark /></span>
+            <span>InFrastuktur</span>
+          </Link>
+          <div className="report-page-header-actions">
+            <ThemeToggle />
+            {!reporterMode && (
+              <Link className="report-back-link" to="/laporan-warga">
+                Lihat laporan warga
+              </Link>
+            )}
+          </div>
+        </header>
+      )}
+
+      <ContentWrapper
+        className={`report-page-content ${embedded ? 'embedded-content' : ''}`}
+      >
         <div className="report-page-heading">
           <span className="report-page-kicker">PARTISIPASI MASYARAKAT</span>
           <h1>Laporkan ketidaksesuaian</h1>
@@ -103,10 +127,25 @@ export default function ReportPage() {
                 rahasia dalam deskripsi.
               </span>
             </div>
+            {relatedProgressId && (
+              <div className="report-page-related-progress">
+                Laporan ini terkait progres{' '}
+                <strong>
+                  {relatedProgress?.title || relatedProgressId}
+                </strong>
+                . Referensi {relatedProgressId}.
+              </div>
+            )}
 
             <label>
               <span>Jenis ketidaksesuaian</span>
-              <select name="category" defaultValue="" required>
+              <select
+                name="category"
+                defaultValue={
+                  isMissingPhotoReport ? 'Tidak ada foto pada Progres' : ''
+                }
+                required
+              >
                 <option value="" disabled>
                   Pilih jenis laporan
                 </option>
@@ -123,6 +162,11 @@ export default function ReportPage() {
               <input
                 name="location"
                 type="text"
+                defaultValue={
+                  isMissingPhotoReport && relatedProgress
+                    ? `Progres: ${relatedProgress.title}`
+                    : ''
+                }
                 placeholder="Contoh: sisi timur, lantai 2"
                 required
               />
@@ -134,6 +178,7 @@ export default function ReportPage() {
                 name="description"
                 minLength="10"
                 rows="5"
+                defaultValue={isMissingPhotoReport ? missingPhotoDescription : ''}
                 placeholder="Ceritakan apa yang terjadi, kapan ditemukan, dan informasi yang membantu pemeriksaan."
                 required
               />
@@ -175,7 +220,7 @@ export default function ReportPage() {
             </p>
           </form>
         )}
-      </main>
+      </ContentWrapper>
     </div>
   )
 }

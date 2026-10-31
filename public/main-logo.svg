@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="233" viewBox="0 0 176 40" fill="none">
+  <defs>
+    <linearGradient id="mark-background" x1="0" y1="0" x2="35" y2="35" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#08A9C1" />
+      <stop offset="1" stop-color="#007F96" />
+    </linearGradient>
+  </defs>
+  <rect y="2.5" width="35" height="35" rx="9" fill="url(#mark-background)" />
+  <g transform="translate(8.5 11)" stroke="#fff" stroke-width="1.275" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M2.25 15.75h13.5" />
+    <path d="M3.75 15.75V5.25l6-3v13.5" />
+    <path d="M14.25 15.75v-7.5l-4.5-3" />
+    <path d="M6.75 6.75v.007M6.75 9v.007M6.75 11.25v.007M6.75 13.5v.007" />
+  </g>
+  <text x="42" y="26" fill="#17212D" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="17" font-weight="800" letter-spacing="-0.8">In</text>
+  <text x="58" y="26" fill="#17212D" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="17" font-weight="600" letter-spacing="-0.8">Frastuktur</text>
+</svg>
