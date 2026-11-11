@@ -7,6 +7,7 @@ import BrandMark from './BrandMark.jsx'
 import ThemeProvider from './ThemeProvider.jsx'
 import { useTheme } from './theme.js'
 import ThemeToggle from './ThemeToggle.jsx'
+import SupabaseLoadingIndicator from './SupabaseLoadingIndicator.jsx'
 import {
   formatCompactRupiah,
   formatProjectDate,
@@ -14,9 +15,14 @@ import {
   useProjectData,
 } from './projectData.js'
 import './App.css'
-import { loadReports, REPORTS_UPDATED_EVENT } from './reportData.js'
+import './ProjectMap.css'
+import { countPublicReports, REPORTS_UPDATED_EVENT } from './reportData.js'
 
 const PdfViewer = lazy(() => import('./PdfViewer.jsx'))
+const PROJECT_DIRECTIONS_URL =
+  'https://www.google.com/maps/dir/-6.2062592,106.921984/Puskesmas+Prambanan,+Jl.+Raya+Piyungan+-+Prambanan+No.Km.1,+Jirak,+Bokoharjo,+Kec.+Prambanan,+Kabupaten+Sleman,+Daerah+Istimewa+Yogyakarta+55792/'
+const PROJECT_MAP_EMBED_URL =
+  'https://maps.google.com/maps?q=-7.7801516%2C110.4824135&z=15&output=embed'
 
 const iconPaths = {
   grid: (
@@ -230,9 +236,9 @@ function ViewerDashboard() {
   )
 
   useEffect(() => {
-    function refreshReportCount() {
+    async function refreshReportCount() {
       try {
-        setReportCount(loadReports().length)
+        setReportCount(await countPublicReports())
         setReportCountError('')
       } catch (error) {
         console.error('Gagal menghitung laporan warga.', error)
@@ -240,7 +246,7 @@ function ViewerDashboard() {
       }
     }
 
-    refreshReportCount()
+    void refreshReportCount()
     window.addEventListener(REPORTS_UPDATED_EVENT, refreshReportCount)
     window.addEventListener('storage', refreshReportCount)
     return () => {
@@ -757,6 +763,7 @@ function ViewerDashboard() {
                     </div>
                   </div>
                 </div>
+
                 {project.permitDocumentUrl ? (
                   <a
                     className="document-link"
@@ -874,6 +881,38 @@ function ViewerDashboard() {
 
             </div>}
           </div>
+
+          {(isOverview || isProjectDetails) && (
+            <section className="project-map-section" aria-labelledby="project-map-title">
+              <div className="project-map-heading">
+                <div>
+                  <span className="section-kicker">LOKASI PROYEK</span>
+                  <h2 id="project-map-title">Peta lokasi proyek</h2>
+                  <p className="sample-project-disclaimer">
+                    Hanya contoh, bukan proyek asli.
+                  </p>
+                  <p>{project.address}, {project.location}</p>
+                </div>
+                <a
+                  className="project-map-directions"
+                  href={PROJECT_DIRECTIONS_URL}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Petunjuk arah <Icon name="arrow" size={15} />
+                </a>
+              </div>
+              <div className="project-map-frame">
+                <iframe
+                  title={`Peta lokasi ${project.name}`}
+                  src={PROJECT_MAP_EMBED_URL}
+                  loading="lazy"
+                  referrerPolicy="no-referrer-when-downgrade"
+                  allowFullScreen
+                />
+              </div>
+            </section>
+          )}
 
           {isDocuments && (
           <div className="panel documents-page-panel">
@@ -1029,6 +1068,7 @@ function ViewerDashboard() {
 export default function App() {
   return (
     <ThemeProvider>
+      <SupabaseLoadingIndicator />
       <Routes>
         <Route path="/" element={<LandingPage />} />
         <Route path="/ringkasan" element={<ViewerDashboard />} />

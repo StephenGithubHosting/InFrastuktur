@@ -4,6 +4,14 @@ import { BrowserRouter } from 'react-router-dom'
 import './index.css'
 import App from './App.jsx'
 
+for (const key of [
+  'infrastuktur-project-data',
+  'infrastuktur-discrepancy-reports',
+  'infrastuktur-progress-delete-requests',
+]) {
+  window.localStorage.removeItem(key)
+}
+
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <BrowserRouter>

@@ -34,12 +34,12 @@ export default function ReportPage({ embedded = false, reporterMode = false }) {
   const [savedReport, setSavedReport] = useState(null)
   const [errorMessage, setErrorMessage] = useState('')
 
-  function handleSubmit(event) {
+  async function handleSubmit(event) {
     event.preventDefault()
     const formData = new FormData(event.currentTarget)
 
     try {
-      const report = saveReport({
+      const report = await saveReport({
         reporterName: String(formData.get('reporterName') || '').trim(),
         contact: String(formData.get('contact') || '').trim(),
         category: String(formData.get('category') || ''),
@@ -215,8 +215,7 @@ export default function ReportPage({ embedded = false, reporterMode = false }) {
               Kirim laporan
             </button>
             <p className="report-storage-disclaimer">
-              Prototipe ini menyimpan laporan pada browser lokal. Pengiriman
-              belum tersinkron ke server atau perangkat lain.
+              Informasi kontak hanya dapat dilihat oleh pengelola proyek.
             </p>
           </form>
         )}

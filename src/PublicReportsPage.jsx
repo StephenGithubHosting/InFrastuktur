@@ -5,9 +5,10 @@ import { useTheme } from './theme.js'
 import ThemeToggle from './ThemeToggle.jsx'
 import ReportPage from './ReportPage.jsx'
 import {
-  loadReports,
+  loadPublicReports,
   REPORTS_UPDATED_EVENT,
   REPORT_STATUSES,
+  subscribeToReports,
 } from './reportData.js'
 import './PublicReportsPage.css'
 
@@ -92,9 +93,9 @@ export default function PublicReportsPage() {
   const isMobileViewport = window.matchMedia('(max-width: 850px)').matches
 
   useEffect(() => {
-    function refreshReports() {
+    async function refreshReports() {
       try {
-        setReports(loadReports())
+        setReports(await loadPublicReports())
         setErrorMessage('')
       } catch (error) {
         console.error('Gagal memuat laporan publik.', error)
@@ -104,11 +105,13 @@ export default function PublicReportsPage() {
       }
     }
 
-    refreshReports()
+    void refreshReports()
     window.addEventListener(REPORTS_UPDATED_EVENT, refreshReports)
     window.addEventListener('storage', refreshReports)
+    const unsubscribe = subscribeToReports(refreshReports)
 
     return () => {
+      unsubscribe()
       window.removeEventListener(REPORTS_UPDATED_EVENT, refreshReports)
       window.removeEventListener('storage', refreshReports)
     }

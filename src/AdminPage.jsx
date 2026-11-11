@@ -10,13 +10,13 @@ import BrandMark from './BrandMark.jsx'
 import { useTheme } from './theme.js'
 import ThemeToggle from './ThemeToggle.jsx'
 import {
-  ADMIN_SESSION_KEY,
   DEFAULT_PROJECT_DATA,
   calculateBudgetRealization,
   calculateMaterialTotal,
   formatRupiah,
   loadProjectData,
   saveProjectData,
+  submitProjectUpdate,
   useProjectData,
 } from './projectData'
 import {
@@ -24,6 +24,7 @@ import {
   loadReports,
   REPORTS_UPDATED_EVENT,
   REPORT_STATUSES,
+  subscribeToReports,
   updateReportStatus,
 } from './reportData.js'
 import {
@@ -31,14 +32,11 @@ import {
   PROGRESS_REQUESTS_UPDATED_EVENT,
   PROGRESS_REQUEST_STATUSES,
   submitProgressDeleteRequest,
+  subscribeToProgressRequests,
   updateProgressDeleteRequestStatus,
 } from './progressRequests.js'
+import { requireSupabase, supabase } from './supabaseClient.js'
 import './AdminPage.css'
-
-const DEMO_EMAIL = 'admin@infrastuktur.id'
-const DEMO_PASSWORD = 'admin123'
-const REPORTER_EMAIL = 'reporter@infrastuktur.id'
-const REPORTER_PASSWORD = 'reporter123'
 
 async function prepareDocumentationPhoto(file) {
   if (!file.type.startsWith('image/')) {
@@ -115,29 +113,42 @@ function AdminLogin({ onLogin }) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [errorMessage, setErrorMessage] = useState('')
-  const [showDemoAccounts, setShowDemoAccounts] = useState(false)
 
-  function handleSubmit(event) {
+  async function handleSubmit(event) {
     event.preventDefault()
+    setErrorMessage('')
 
-    const role =
-      email === DEMO_EMAIL && password === DEMO_PASSWORD
-        ? 'admin'
-        : email === REPORTER_EMAIL && password === REPORTER_PASSWORD
-          ? 'reporter'
-          : null
+    try {
+      const client = requireSupabase()
+      const { data, error } = await client.auth.signInWithPassword({ email, password })
+      if (error) throw error
 
-    if (!role) {
-      setErrorMessage('Email atau kata sandi tidak sesuai.')
-      return
+      const { data: roleData, error: roleError } = await client
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', data.user.id)
+        .maybeSingle()
+      if (roleError) throw roleError
+      if (!roleData) {
+        await client.auth.signOut()
+        throw new Error('Akun ini belum diberi peran admin atau reporter.')
+      }
+
+      onLogin(roleData.role)
+      navigate(
+        roleData.role === 'admin'
+          ? '/admin/informasi-proyek'
+          : '/reporter/anggaran',
+        { replace: true },
+      )
+    } catch (error) {
+      console.error('Gagal masuk ke Supabase.', error)
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : 'Email atau kata sandi tidak sesuai.',
+      )
     }
-
-    sessionStorage.setItem(ADMIN_SESSION_KEY, role)
-    onLogin(role)
-    navigate(
-      role === 'admin' ? '/admin/informasi-proyek' : '/reporter/anggaran',
-      { replace: true },
-    )
   }
 
   return (
@@ -195,44 +206,23 @@ function AdminLogin({ onLogin }) {
                 Masuk
               </button>
             </form>
-            <button
-              className="demo-toggle-button"
-              type="button"
-              aria-expanded={showDemoAccounts}
-              aria-controls="demo-credentials"
-              onClick={() => setShowDemoAccounts((visible) => !visible)}
-            >
-              {showDemoAccounts ? 'Sembunyikan akun demo' : 'Tampilkan akun demo'}
-            </button>
           </div>
 
-          <div className="demo-panel" id="demo-credentials">
-            {showDemoAccounts ? (
-              <div className="demo-credentials">
-                <strong>Akun login demo admin</strong>
-                <span>Email: {DEMO_EMAIL}</span>
-                <span>Kata sandi: {DEMO_PASSWORD}</span>
-                <strong>Akun login demo reporter</strong>
-                <span>Email: {REPORTER_EMAIL}</span>
-                <span>Kata sandi: {REPORTER_PASSWORD}</span>
-              </div>
-            ) : (
-              <div className="demo-credentials-placeholder">
-                <span>AKSES DEMO BROWSER</span>
-                <strong>Akun admin &amp; reporter</strong>
-                <p>
-                  Kredensial demo tersedia di panel ini. Tekan tombol di bawah
-                  Masuk untuk menampilkannya.
-                </p>
-                <span className="demo-placeholder-mark">ID · DEMO</span>
-              </div>
-            )}
+          <div className="demo-panel">
+            <div className="demo-credentials-placeholder">
+              <span>AKSES TERKONTROL</span>
+              <strong>Akun proyek</strong>
+              <p>
+                Masuk menggunakan akun yang telah dibuat dan diberi peran di
+                Supabase.
+              </p>
+              <span className="demo-placeholder-mark">SUPABASE AUTH</span>
+            </div>
           </div>
         </div>
 
         <div className="security-notice">
-          Ini adalah login demo di browser. Jangan gunakan untuk melindungi data
-          sungguhan tanpa autentikasi backend.
+          Hak akses diperiksa kembali oleh kebijakan keamanan database.
         </div>
 
         <Link className="back-to-public" to="/ringkasan">
@@ -285,7 +275,7 @@ function ReporterDashboard({ onLogout }) {
     }
   }
 
-  function submitProgress(event) {
+  async function submitProgress(event) {
     event.preventDefault()
     const form = event.currentTarget
     const formData = new FormData(form)
@@ -318,11 +308,7 @@ function ReporterDashboard({ onLogout }) {
     }
 
     try {
-      saveProjectData({
-        ...project,
-        progress: progressValue,
-        updates: [update, ...project.updates],
-      })
+      await submitProjectUpdate(update)
       form.reset()
       setPhoto(null)
       setPhotoUrl('')
@@ -339,8 +325,7 @@ function ReporterDashboard({ onLogout }) {
   }
 
   function handleLogout() {
-    sessionStorage.removeItem(ADMIN_SESSION_KEY)
-    onLogout()
+    void onLogout()
   }
 
   return (
@@ -643,9 +628,9 @@ function AdminReportsPage({ onLogout }) {
   const [errorMessage, setErrorMessage] = useState('')
 
   useEffect(() => {
-    function refreshReports() {
+    async function refreshReports() {
       try {
-        setReports(loadReports())
+        setReports(await loadReports())
         setErrorMessage('')
       } catch (error) {
         console.error('Gagal memuat laporan warga.', error)
@@ -655,25 +640,26 @@ function AdminReportsPage({ onLogout }) {
       }
     }
 
-    refreshReports()
+    void refreshReports()
     window.addEventListener(REPORTS_UPDATED_EVENT, refreshReports)
     window.addEventListener('storage', refreshReports)
+    const unsubscribe = subscribeToReports(refreshReports)
 
     return () => {
+      unsubscribe()
       window.removeEventListener(REPORTS_UPDATED_EVENT, refreshReports)
       window.removeEventListener('storage', refreshReports)
     }
   }, [])
 
   function handleLogout() {
-    sessionStorage.removeItem(ADMIN_SESSION_KEY)
-    onLogout()
+    void onLogout()
     navigate('/login', { replace: true })
   }
 
-  function changeStatus(reportId, status) {
+  async function changeStatus(reportId, status) {
     try {
-      updateReportStatus(reportId, status)
+      await updateReportStatus(reportId, status)
       setErrorMessage('')
     } catch (error) {
       console.error('Gagal memperbarui status laporan.', error)
@@ -683,13 +669,13 @@ function AdminReportsPage({ onLogout }) {
     }
   }
 
-  function removeReport(reportId) {
+  async function removeReport(reportId) {
     if (!window.confirm('Hapus laporan ini secara permanen dari browser ini?')) {
       return
     }
 
     try {
-      deleteReport(reportId)
+      await deleteReport(reportId)
       setErrorMessage('')
     } catch (error) {
       console.error('Gagal menghapus laporan.', error)
@@ -953,7 +939,7 @@ function ProgressDeleteRequestPage() {
   const [errorMessage, setErrorMessage] = useState('')
   const requestedProgressId = searchParams.get('progress') || ''
 
-  function handleSubmit(event) {
+  async function handleSubmit(event) {
     event.preventDefault()
     const formData = new FormData(event.currentTarget)
     const update = project.updates.find(
@@ -966,7 +952,7 @@ function ProgressDeleteRequestPage() {
     }
 
     try {
-      submitProgressDeleteRequest({
+      await submitProgressDeleteRequest({
         progressId: update.id,
         progressTitle: update.title,
         progressDate: update.date,
@@ -1062,33 +1048,34 @@ function AdminProgressDeleteRequestsPage({ onLogout }) {
   const [errorMessage, setErrorMessage] = useState('')
 
   useEffect(() => {
-    function refreshRequests() {
+    async function refreshRequests() {
       try {
-        setRequests(loadProgressDeleteRequests())
+        setRequests(await loadProgressDeleteRequests())
         setErrorMessage('')
       } catch (error) {
         console.error('Gagal memuat permintaan hapus progres.', error)
         setErrorMessage('Daftar permintaan tidak dapat dibaca.')
       }
     }
-    refreshRequests()
+    void refreshRequests()
     window.addEventListener(PROGRESS_REQUESTS_UPDATED_EVENT, refreshRequests)
     window.addEventListener('storage', refreshRequests)
+    const unsubscribe = subscribeToProgressRequests(refreshRequests)
     return () => {
+      unsubscribe()
       window.removeEventListener(PROGRESS_REQUESTS_UPDATED_EVENT, refreshRequests)
       window.removeEventListener('storage', refreshRequests)
     }
   }, [])
 
   function handleLogout() {
-    sessionStorage.removeItem(ADMIN_SESSION_KEY)
-    onLogout()
+    void onLogout()
     navigate('/login', { replace: true })
   }
 
-  function changeStatus(requestId, status) {
+  async function changeStatus(requestId, status) {
     try {
-      updateProgressDeleteRequestStatus(requestId, status)
+      await updateProgressDeleteRequestStatus(requestId, status)
       setErrorMessage('')
     } catch (error) {
       console.error('Gagal memperbarui status permintaan hapus progres.', error)
@@ -1184,7 +1171,8 @@ function AdminDashboard({ onLogout }) {
   const navigate = useNavigate()
   const location = useLocation()
   const { isDarkTheme } = useTheme()
-  const [draft, setDraft] = useState(loadProjectData)
+  const [draft, setDraft] = useState(() => structuredClone(DEFAULT_PROJECT_DATA))
+  const [projectLoaded, setProjectLoaded] = useState(false)
   const [message, setMessage] = useState('')
   const [errorMessage, setErrorMessage] = useState('')
   const [editingPhotoUrlIndex, setEditingPhotoUrlIndex] = useState(null)
@@ -1195,6 +1183,25 @@ function AdminDashboard({ onLogout }) {
       (section) => section.path.toLowerCase() === normalizedPath,
     ) ??
     ADMIN_SECTIONS[0]
+
+  useEffect(() => {
+    let active = true
+    loadProjectData()
+      .then((project) => {
+        if (active) {
+          setDraft(project)
+          setProjectLoaded(true)
+        }
+      })
+      .catch((error) => {
+        console.error('Gagal memuat data proyek untuk editor.', error)
+        if (active) setErrorMessage('Data proyek belum dapat dimuat dari Supabase.')
+      })
+
+    return () => {
+      active = false
+    }
+  }, [])
 
   if (activeSection.path === '/admin/laporan-ketidaksesuaian') {
     return <AdminReportsPage onLogout={onLogout} />
@@ -1323,7 +1330,7 @@ function AdminDashboard({ onLogout }) {
     }))
   }
 
-  function handleSave(event) {
+  async function handleSave(event) {
     event.preventDefault()
 
     const totalBudget = Number(draft.budgetTotal)
@@ -1382,7 +1389,7 @@ function AdminDashboard({ onLogout }) {
     }
 
     try {
-      saveProjectData({
+      await saveProjectData({
         ...draft,
         year: Number(draft.year),
         daysRemaining: Number(draft.daysRemaining),
@@ -1412,7 +1419,7 @@ function AdminDashboard({ onLogout }) {
     }
   }
 
-  function resetDemoData() {
+  async function resetDemoData() {
     if (
       !window.confirm(
         'Pulihkan semua informasi proyek ke data demo awal? Perubahan saat ini akan diganti.',
@@ -1423,7 +1430,7 @@ function AdminDashboard({ onLogout }) {
 
     try {
       const resetData = structuredClone(DEFAULT_PROJECT_DATA)
-      saveProjectData(resetData)
+      await saveProjectData(resetData)
       setDraft(resetData)
       setMessage('Data proyek dikembalikan ke data demo awal.')
       setErrorMessage('')
@@ -1434,8 +1441,7 @@ function AdminDashboard({ onLogout }) {
   }
 
   function handleLogout() {
-    sessionStorage.removeItem(ADMIN_SESSION_KEY)
-    onLogout()
+    void onLogout()
     navigate('/login', { replace: true })
   }
 
@@ -2065,7 +2071,11 @@ function AdminDashboard({ onLogout }) {
           )}
 
           <div className="editor-actions">
-            <button className="admin-primary-button" type="submit">
+            <button
+              className="admin-primary-button"
+              type="submit"
+              disabled={!projectLoaded}
+            >
               {saveLabel}
             </button>
           </div>
@@ -2074,6 +2084,7 @@ function AdminDashboard({ onLogout }) {
             <button
               className="admin-reset-button"
               type="button"
+              disabled={!projectLoaded}
               onClick={resetDemoData}
             >
               Pulihkan semua data demo
@@ -2088,12 +2099,71 @@ function AdminDashboard({ onLogout }) {
 
 export default function AdminPage() {
   const location = useLocation()
-  const [userRole, setUserRole] = useState(
-    () => {
-      const savedRole = sessionStorage.getItem(ADMIN_SESSION_KEY)
-      return savedRole === 'reporter' ? 'reporter' : savedRole ? 'admin' : null
-    },
-  )
+  const [userRole, setUserRole] = useState(null)
+  const [authLoading, setAuthLoading] = useState(Boolean(supabase))
+
+  useEffect(() => {
+    let active = true
+
+    async function loadRole(session) {
+      if (!session?.user) {
+        if (active) {
+          setUserRole(null)
+          setAuthLoading(false)
+        }
+        return
+      }
+
+      try {
+        const { data, error } = await requireSupabase()
+          .from('user_roles')
+          .select('role')
+          .eq('user_id', session.user.id)
+          .maybeSingle()
+        if (error) throw error
+
+        if (active) {
+          setUserRole(data?.role || null)
+          setAuthLoading(false)
+        }
+        if (!data) await requireSupabase().auth.signOut()
+      } catch (error) {
+        console.error('Gagal memuat peran akun.', error)
+        if (active) {
+          setUserRole(null)
+          setAuthLoading(false)
+        }
+      }
+    }
+
+    if (!supabase) {
+      return () => {
+        active = false
+      }
+    }
+
+    supabase.auth.getSession().then(({ data, error }) => {
+      if (error) console.error('Gagal memulihkan sesi Supabase.', error)
+      void loadRole(data?.session)
+    })
+    const { data } = supabase.auth.onAuthStateChange((_event, session) => {
+      window.setTimeout(() => void loadRole(session), 0)
+    })
+
+    return () => {
+      active = false
+      data.subscription.unsubscribe()
+    }
+  }, [])
+
+  async function handleLogout() {
+    await requireSupabase().auth.signOut()
+    setUserRole(null)
+  }
+
+  if (authLoading) {
+    return <main className="admin-auth-page">Memeriksa sesi...</main>
+  }
 
   if (userRole === 'admin') {
     if (location.pathname.startsWith('/reporter')) {
@@ -2102,7 +2172,7 @@ export default function AdminPage() {
     if (location.pathname === '/login' || location.pathname === '/admin') {
       return <Navigate to="/admin/informasi-proyek" replace />
     }
-    return <AdminDashboard onLogout={() => setUserRole(null)} />
+    return <AdminDashboard onLogout={handleLogout} />
   }
 
   if (userRole === 'reporter') {
@@ -2115,12 +2185,12 @@ export default function AdminPage() {
     if (location.pathname === '/login' || location.pathname === '/reporter') {
       return <Navigate to="/reporter/anggaran" replace />
     }
-    return <ReporterDashboard onLogout={() => setUserRole(null)} />
+    return <ReporterDashboard onLogout={handleLogout} />
   }
 
   if (location.pathname !== '/login') {
     return <Navigate to="/login" replace />
   }
 
-  return <AdminLogin onLogin={(role) => setUserRole(role)} />
+  return <AdminLogin onLogin={setUserRole} />
 }

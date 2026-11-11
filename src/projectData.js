@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
+import { requireSupabase, supabase } from './supabaseClient.js'
 
-export const PROJECT_STORAGE_KEY = 'infrastuktur-project-data'
-export const ADMIN_SESSION_KEY = 'infrastuktur-admin-session'
+const PROJECT_ID = 1
 
 export const DEFAULT_PROJECT_DATA = {
   name: 'Puskesmas Prambanan',
@@ -211,85 +211,128 @@ export function calculateBudgetRealization(categories = [], materials = []) {
 }
 
 export function loadProjectData() {
-  const savedData = localStorage.getItem(PROJECT_STORAGE_KEY)
+  return readProjectData()
+}
 
-  if (!savedData) {
-    return cloneDefaultData()
-  }
-
-  try {
-    const savedProject = JSON.parse(savedData)
-    const defaultProject = cloneDefaultData()
-    const savedUpdates = Array.isArray(savedProject.updates)
-      ? savedProject.updates
-      : defaultProject.updates
-    const savedUpdateIds = new Set(savedUpdates.map((update) => update.id))
-    const project = {
-      ...defaultProject,
-      ...savedProject,
-      categories: (
-        Array.isArray(savedProject.categories)
-          ? savedProject.categories
-          : defaultProject.categories
-      ).map((category) => ({
-        ...category,
-        materialCategory:
-          typeof category.materialCategory === 'boolean'
-            ? category.materialCategory
-            : /material|bahan/i.test(category.name || ''),
-      })),
-      materials: Array.isArray(savedProject.materials)
-        ? savedProject.materials
-        : defaultProject.materials,
-      updates: [
-        ...savedUpdates,
-        ...defaultProject.updates.filter(
-          (update) => !savedUpdateIds.has(update.id),
-        ),
-      ].sort((first, second) =>
-        String(second.date).localeCompare(String(first.date)),
-      ),
-    }
-    project.budgetSpent = calculateBudgetRealization(
-      project.categories,
-      Array.isArray(project.materials) ? project.materials : [],
-    )
-    project.budgetHistory = {
-      ...defaultProject.budgetHistory,
-      ...(savedProject.budgetHistory &&
-      typeof savedProject.budgetHistory === 'object' &&
-      !Array.isArray(savedProject.budgetHistory)
-        ? savedProject.budgetHistory
-        : {}),
-      [String(project.year)]: {
-        budgetTotal: Number(project.budgetTotal),
-        budgetSpent: project.budgetSpent,
-      },
-    }
-    project.categories = synchronizeMaterialCategoryAmounts(
-      project.categories,
-      project.materials,
-    )
-
-    if (
-      project.permitDocumentUrl === DEFAULT_PROJECT_DATA.permitDocumentUrl &&
-      [
-        'Surat permohonan IMB',
-        'Ringkasan Proyek Puskesmas Prambanan',
-      ].includes(project.permitDocumentName)
-    ) {
-      project.permitDocumentName = DEFAULT_PROJECT_DATA.permitDocumentName
-      project.planDocumentUrl ||= DEFAULT_PROJECT_DATA.planDocumentUrl
-    }
-
-    return project
-  } catch (error) {
-    console.error('Tidak dapat membaca data proyek tersimpan.', error)
-    return cloneDefaultData()
+function mapProgressUpdate(row) {
+  return {
+    id: row.id,
+    date: row.date,
+    time: row.time,
+    title: row.title,
+    note: row.note,
+    image: row.image,
+    progress: row.progress,
   }
 }
 
-export function saveProjectData(project) {
+function toProgressRow(update) {
+  return {
+    id: update.id,
+    date: update.date,
+    time: update.time,
+    title: update.title,
+    note: update.note,
+    image: update.image,
+    progress: Number(update.progress ?? 0),
+  }
+}
+
+async function readProjectData() {
+  const client = requireSupabase()
+  const [{ data: projectRow, error: projectError }, { data: updateRows, error: updatesError }] =
+    await Promise.all([
+      client.from('projects').select('data').eq('id', PROJECT_ID).maybeSingle(),
+      client
+        .from('project_updates')
+        .select('id, date, time, title, note, image, progress')
+        .order('date', { ascending: false })
+        .order('created_at', { ascending: false }),
+    ])
+
+  if (projectError) throw projectError
+  if (updatesError) throw updatesError
+
+  const defaultProject = cloneDefaultData()
+  const savedProject = projectRow?.data || {}
+  const project = {
+    ...defaultProject,
+    ...savedProject,
+    categories: (
+      Array.isArray(savedProject.categories)
+        ? savedProject.categories
+        : defaultProject.categories
+    ).map((category) => ({
+      ...category,
+      materialCategory:
+        typeof category.materialCategory === 'boolean'
+          ? category.materialCategory
+          : /material|bahan/i.test(category.name || ''),
+    })),
+    materials: Array.isArray(savedProject.materials)
+      ? savedProject.materials
+      : defaultProject.materials,
+    updates: projectRow
+      ? (updateRows || []).map(mapProgressUpdate)
+      : defaultProject.updates,
+  }
+  project.budgetSpent = calculateBudgetRealization(
+    project.categories,
+    project.materials,
+  )
+  project.budgetHistory = {
+    ...defaultProject.budgetHistory,
+    ...(savedProject.budgetHistory || {}),
+    [String(project.year)]: {
+      budgetTotal: Number(project.budgetTotal),
+      budgetSpent: project.budgetSpent,
+    },
+  }
+  project.categories = synchronizeMaterialCategoryAmounts(
+    project.categories,
+    project.materials,
+  )
+  project.progress = Number(project.updates[0]?.progress ?? project.progress)
+
+  if (
+    project.permitDocumentUrl === DEFAULT_PROJECT_DATA.permitDocumentUrl &&
+    ['Surat permohonan IMB', 'Ringkasan Proyek Puskesmas Prambanan'].includes(
+      project.permitDocumentName,
+    )
+  ) {
+    project.permitDocumentName = DEFAULT_PROJECT_DATA.permitDocumentName
+    project.planDocumentUrl ||= DEFAULT_PROJECT_DATA.planDocumentUrl
+  }
+
+  return project
+}
+
+async function uploadProgressImage(image, updateId, stablePath = false) {
+  if (!image?.startsWith('data:image/')) return image
+
+  const response = await fetch(image)
+  const blob = await response.blob()
+  const extension = blob.type.split('/')[1]?.replace('jpeg', 'jpg') || 'jpg'
+  const path = stablePath
+    ? `progress/${encodeURIComponent(updateId)}.${extension}`
+    : `progress/${updateId}-${crypto.randomUUID()}.${extension}`
+  const client = requireSupabase()
+  const { error } = await client.storage
+    .from('project-media')
+    .upload(path, blob, { contentType: blob.type, upsert: stablePath })
+
+  if (error) throw error
+  return client.storage.from('project-media').getPublicUrl(path).data.publicUrl
+}
+
+async function prepareProgressRow(update, stableImagePath = false) {
+  return {
+    ...toProgressRow(update),
+    image: await uploadProgressImage(update.image, update.id, stableImagePath),
+  }
+}
+
+export async function saveProjectData(project, { removeMissingUpdates = true } = {}) {
   const budgetSpent = calculateBudgetRealization(
     project.categories,
     project.materials,
@@ -309,24 +352,94 @@ export function saveProjectData(project) {
     ),
     budgetSpent,
   }
-  localStorage.setItem(PROJECT_STORAGE_KEY, JSON.stringify(projectToSave))
+  const client = requireSupabase()
+  const { updates, ...projectData } = projectToSave
+  const { error: projectError } = await client.from('projects').upsert({
+    id: PROJECT_ID,
+    data: projectData,
+    updated_at: new Date().toISOString(),
+  })
+  if (projectError) throw projectError
+
+  const progressRows = await Promise.all(
+    updates.map((update) => prepareProgressRow(update, !removeMissingUpdates)),
+  )
+  if (progressRows.length) {
+    const { error: updatesError } = await client
+      .from('project_updates')
+      .upsert(progressRows, { onConflict: 'id' })
+    if (updatesError) throw updatesError
+  }
+
+  if (removeMissingUpdates) {
+    const { data: savedUpdates, error: savedUpdatesError } = await client
+      .from('project_updates')
+      .select('id')
+    if (savedUpdatesError) throw savedUpdatesError
+
+    const progressIds = new Set(progressRows.map((update) => update.id))
+    const removedProgressIds = savedUpdates
+      .map((update) => update.id)
+      .filter((id) => !progressIds.has(id))
+    if (removedProgressIds.length) {
+      const { error: deleteError } = await client
+        .from('project_updates')
+        .delete()
+        .in('id', removedProgressIds)
+      if (deleteError) throw deleteError
+    }
+  }
+
   window.dispatchEvent(new Event('project-data-updated'))
+  return projectToSave
+}
+
+export async function submitProjectUpdate(update) {
+  const client = requireSupabase()
+  const progressRow = await prepareProgressRow(update)
+  const { error } = await client.from('project_updates').insert(progressRow)
+  if (error) throw error
+  window.dispatchEvent(new Event('project-data-updated'))
+  return update
 }
 
 export function useProjectData() {
-  const [project, setProject] = useState(loadProjectData)
+  const [project, setProject] = useState(cloneDefaultData)
 
   useEffect(() => {
+    let active = true
     function refreshProject() {
-      setProject(loadProjectData())
+      readProjectData()
+        .then((data) => {
+          if (active) setProject(data)
+        })
+        .catch((error) => {
+          console.error('Gagal memuat data proyek dari Supabase.', error)
+        })
     }
 
+    refreshProject()
     window.addEventListener('storage', refreshProject)
     window.addEventListener('project-data-updated', refreshProject)
+    const channel = supabase
+      ?.channel(`project-data-${crypto.randomUUID()}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'projects' },
+        refreshProject,
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'project_updates' },
+        refreshProject,
+      )
+      .subscribe()
 
     return () => {
+      active = false
       window.removeEventListener('storage', refreshProject)
       window.removeEventListener('project-data-updated', refreshProject)
+      if (channel) supabase?.removeChannel(channel)
     }
   }, [])
 
